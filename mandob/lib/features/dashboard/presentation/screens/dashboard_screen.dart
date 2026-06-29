@@ -77,6 +77,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.fact_check),
+              title: const Text('جرد المخزون'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/products/inventory');
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.receipt_long),
               title: const Text('المبيعات'),
               onTap: () {
@@ -167,16 +175,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 32),
                   const Text('إجراءات سريعة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  
                   Wrap(
                     spacing: 16,
                     runSpacing: 16,
                     children: [
                       _buildActionBtn(context, 'فاتورة جديدة', Icons.add_shopping_cart, () => context.push('/invoices/new')),
+                      _buildActionBtn(context, 'فاتورة مرتجع', Icons.keyboard_return, () => context.push('/invoices/new-return')),
                       _buildActionBtn(context, 'إضافة مصروف', Icons.money_off, () => context.push('/expenses/new')),
                       _buildActionBtn(context, 'إضافة عميل', Icons.person_add, () => context.push('/customers/edit/0')),
-                      _buildActionBtn(context, 'شراء مخزون', Icons.inventory, () => context.push('/stock/entry')),
+                      _buildActionBtn(context, 'إضافة مخزون', Icons.add_box, () => context.push('/stock/entry')),
+                      _buildActionBtn(context, 'مرتجع للمخزن', Icons.assignment_return, () => context.push('/stock/return')),
                     ],
                   ),
                 ],

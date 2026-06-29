@@ -4,6 +4,7 @@ class InvoiceModel extends Invoice {
   const InvoiceModel({
     required super.id,
     required super.invoiceNumber,
+    super.type = 'sale',
     required super.customerId,
     super.customerName,
     super.customerPhone,
@@ -21,6 +22,7 @@ class InvoiceModel extends Invoice {
     return InvoiceModel(
       id: map['id'] as int,
       invoiceNumber: map['invoice_number'] as String,
+      type: map['type'] as String? ?? 'sale',
       customerId: map['customer_id'] as int,
       customerName: map['customer_name'] as String?,
       customerPhone: map['customer_phone'] as String?,
@@ -39,6 +41,7 @@ class InvoiceModel extends Invoice {
     return {
       if (id > 0) 'id': id,
       'invoice_number': invoiceNumber,
+      'type': type,
       'customer_id': customerId,
       'invoice_date': invoiceDate,
       'total_amount': totalAmount,
@@ -55,6 +58,7 @@ class InvoiceModel extends Invoice {
     return InvoiceModel(
       id: entity.id,
       invoiceNumber: entity.invoiceNumber,
+      type: entity.type,
       customerId: entity.customerId,
       customerName: entity.customerName,
       customerPhone: entity.customerPhone,

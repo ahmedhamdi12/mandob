@@ -21,53 +21,92 @@ class InvoiceLocalDataSource {
       );
 
       for (final item in items) {
-        // FIFO Calculation for cost_at_sale
-        double totalCostForThisItem = 0.0;
-        int qtyToDeduct = item.qtyUnits;
+        double calculatedUnitCostAtSale = 0.0;
+        int qtyMultiplier = invoice.type == 'return' ? 1 : -1;
         
-        final batches = await txn.query(
-          DatabaseTables.stockPurchases,
-          where: 'product_id = ? AND remaining_qty > 0',
-          whereArgs: [item.productId],
-          orderBy: 'purchase_date ASC, id ASC',
-        );
+        if (invoice.type == 'sale') {
+          // FIFO Calculation for cost_at_sale
+          double totalCostForThisItem = 0.0;
+          int qtyToDeduct = item.qtyUnits;
+          
+          final batches = await txn.query(
+            DatabaseTables.stockPurchases,
+            where: 'product_id = ? AND remaining_qty > 0',
+            whereArgs: [item.productId],
+            orderBy: 'purchase_date ASC, id ASC',
+          );
 
-        for (var batch in batches) {
-          if (qtyToDeduct <= 0) break;
+          for (var batch in batches) {
+            if (qtyToDeduct <= 0) break;
 
-          final batchId = batch['id'] as int;
-          final batchRemaining = batch['remaining_qty'] as int;
-          final batchCost = (batch['cost_per_unit'] as num).toDouble();
+            final batchId = batch['id'] as int;
+            final batchRemaining = batch['remaining_qty'] as int;
+            final batchCost = (batch['cost_per_unit'] as num).toDouble();
 
-          if (batchRemaining >= qtyToDeduct) {
-            totalCostForThisItem += (qtyToDeduct * batchCost);
-            await txn.update(
-              DatabaseTables.stockPurchases,
-              {'remaining_qty': batchRemaining - qtyToDeduct},
-              where: 'id = ?',
-              whereArgs: [batchId],
-            );
-            qtyToDeduct = 0;
-          } else {
-            totalCostForThisItem += (batchRemaining * batchCost);
-            qtyToDeduct -= batchRemaining;
-            await txn.update(
-              DatabaseTables.stockPurchases,
-              {'remaining_qty': 0},
-              where: 'id = ?',
-              whereArgs: [batchId],
-            );
+            if (batchRemaining >= qtyToDeduct) {
+              totalCostForThisItem += (qtyToDeduct * batchCost);
+              await txn.update(
+                DatabaseTables.stockPurchases,
+                {'remaining_qty': batchRemaining - qtyToDeduct},
+                where: 'id = ?',
+                whereArgs: [batchId],
+              );
+              qtyToDeduct = 0;
+            } else {
+              totalCostForThisItem += (batchRemaining * batchCost);
+              qtyToDeduct -= batchRemaining;
+              await txn.update(
+                DatabaseTables.stockPurchases,
+                {'remaining_qty': 0},
+                where: 'id = ?',
+                whereArgs: [batchId],
+              );
+            }
           }
-        }
 
-        if (qtyToDeduct > 0) {
-           final productResult = await txn.query(DatabaseTables.products, columns: ['average_cost'], where: 'id = ?', whereArgs: [item.productId]);
-           double avgCost = 0.0;
-           if (productResult.isNotEmpty) avgCost = (productResult.first['average_cost'] as num).toDouble();
-           totalCostForThisItem += (qtyToDeduct * avgCost);
-        }
+          if (qtyToDeduct > 0) {
+             final productResult = await txn.query(
+               DatabaseTables.stockPurchases, 
+               columns: ['cost_per_unit'], 
+               where: 'product_id = ?', 
+               whereArgs: [item.productId], 
+               orderBy: 'purchase_date DESC, id DESC', 
+               limit: 1
+             );
+             double fallbackCost = 0.0;
+             if (productResult.isNotEmpty) fallbackCost = (productResult.first['cost_per_unit'] as num).toDouble();
+             totalCostForThisItem += (qtyToDeduct * fallbackCost);
+          }
 
-        double calculatedUnitCostAtSale = item.qtyUnits > 0 ? (totalCostForThisItem / item.qtyUnits) : 0.0;
+          calculatedUnitCostAtSale = item.qtyUnits > 0 ? (totalCostForThisItem / item.qtyUnits) : 0.0;
+        } else {
+          // It's a return. 
+          // 1. We get the latest purchase cost for costAtSale recording purposes.
+          final productResult = await txn.query(
+            DatabaseTables.stockPurchases, 
+            columns: ['cost_per_unit'], 
+            where: 'product_id = ?', 
+            whereArgs: [item.productId],
+            orderBy: 'purchase_date DESC, id DESC',
+            limit: 1
+          );
+          if (productResult.isNotEmpty) {
+            calculatedUnitCostAtSale = (productResult.first['cost_per_unit'] as num).toDouble();
+          }
+          // 2. We put it back in stock_purchases so it can be sold again (FIFO).
+          await txn.insert(
+            DatabaseTables.stockPurchases,
+            {
+              'product_id': item.productId,
+              'qty_units': item.qtyUnits,
+              'cost_per_unit': calculatedUnitCostAtSale,
+              'purchase_date': invoice.invoiceDate,
+              'notes': 'مرتجع عميل فاتورة #${invoice.invoiceNumber}',
+              'remaining_qty': item.qtyUnits,
+              'created_at': invoice.createdAt,
+            }
+          );
+        }
 
         // 2. Insert invoice item
         final itemMap = item.copyWith(
@@ -78,38 +117,43 @@ class InvoiceLocalDataSource {
 
         // 3. Update product stock
         await txn.rawUpdate(
-          'UPDATE ${DatabaseTables.products} SET stock_qty = stock_qty - ? WHERE id = ?',
-          [item.qtyUnits, item.productId],
+          'UPDATE ${DatabaseTables.products} SET stock_qty = stock_qty + ? WHERE id = ?',
+          [item.qtyUnits * qtyMultiplier, item.productId],
         );
 
         // 4. Insert stock movement
         await txn.insert(DatabaseTables.stockMovements, {
           'product_id': item.productId,
-          'type': 'sale',
-          'qty': -item.qtyUnits,
+          'type': invoice.type == 'return' ? 'customer_return' : 'sale',
+          'qty': item.qtyUnits * qtyMultiplier,
           'reference_id': invoiceId,
           'created_at': invoice.createdAt,
         });
 
-        // 5. Update last price
-        await txn.insert(
-          DatabaseTables.lastPrices, 
-          {
-            'product_id': item.productId,
-            'customer_id': invoice.customerId,
-            'unit_id': item.unitId,
-            'last_price': item.unitPrice,
-            'updated_at': invoice.createdAt,
-          }, 
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        // 5. Update last price (Only for sales)
+        if (invoice.type == 'sale') {
+          await txn.insert(
+            DatabaseTables.lastPrices, 
+            {
+              'product_id': item.productId,
+              'customer_id': invoice.customerId,
+              'unit_id': item.unitId,
+              'last_price': item.unitPrice,
+              'updated_at': invoice.createdAt,
+            }, 
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
       }
 
-      // 6. Update customer balance (Debt increases -> balance becomes more negative)
+      // 6. Update customer balance 
+      // Debt increases -> balance becomes more negative for sales. 
+      // For returns, debt decreases -> balance becomes more positive.
       if (invoice.remaining > 0) {
+        int balanceMultiplier = invoice.type == 'return' ? 1 : -1;
         await txn.rawUpdate(
-          'UPDATE ${DatabaseTables.customers} SET current_balance = current_balance - ? WHERE id = ?',
-          [invoice.remaining, invoice.customerId]
+          'UPDATE ${DatabaseTables.customers} SET current_balance = current_balance + ? WHERE id = ?',
+          [invoice.remaining * balanceMultiplier, invoice.customerId]
         );
       }
 
@@ -158,36 +202,70 @@ class InvoiceLocalDataSource {
       whereArgs.add('$date%');
     }
 
-    final result = await db.rawQuery(
-      'SELECT SUM(total_amount) as total FROM ${DatabaseTables.invoices} WHERE $whereClause',
+    final saleResult = await db.rawQuery(
+      'SELECT SUM(total_amount) as total FROM ${DatabaseTables.invoices} WHERE $whereClause AND type="sale"',
+      whereArgs
+    );
+    
+    final returnResult = await db.rawQuery(
+      'SELECT SUM(total_amount) as total FROM ${DatabaseTables.invoices} WHERE $whereClause AND type="return"',
       whereArgs
     );
 
-    if (result.isNotEmpty && result.first['total'] != null) {
-      return (result.first['total'] as num).toDouble();
+    double total = 0.0;
+    if (saleResult.isNotEmpty && saleResult.first['total'] != null) {
+      total += (saleResult.first['total'] as num).toDouble();
     }
-    return 0.0;
+    if (returnResult.isNotEmpty && returnResult.first['total'] != null) {
+      total -= (returnResult.first['total'] as num).toDouble();
+    }
+    
+    return total;
   }
 
   Future<double> getTotalCollections({String? date}) async {
     final db = await dbHelper.database;
-    String whereClause = 'status != "cancelled"';
-    List<dynamic> whereArgs = [];
+    String invoiceWhere = 'status != "cancelled"';
+    String collectionWhere = '1=1';
+    List<dynamic> invoiceArgs = [];
+    List<dynamic> collectionArgs = [];
 
     if (date != null && date.isNotEmpty) {
-      whereClause += ' AND invoice_date LIKE ?';
-      whereArgs.add('$date%');
+      invoiceWhere += ' AND invoice_date LIKE ?';
+      invoiceArgs.add('$date%');
+      
+      collectionWhere += ' AND collect_date LIKE ?';
+      collectionArgs.add('$date%');
     }
 
-    final result = await db.rawQuery(
-      'SELECT SUM(paid_amount) as total FROM ${DatabaseTables.invoices} WHERE $whereClause',
-      whereArgs
+    final saleInvoiceResult = await db.rawQuery(
+      'SELECT SUM(paid_amount) as total FROM ${DatabaseTables.invoices} WHERE $invoiceWhere AND type="sale"',
+      invoiceArgs
+    );
+    
+    final returnInvoiceResult = await db.rawQuery(
+      'SELECT SUM(paid_amount) as total FROM ${DatabaseTables.invoices} WHERE $invoiceWhere AND type="return"',
+      invoiceArgs
     );
 
-    if (result.isNotEmpty && result.first['total'] != null) {
-      return (result.first['total'] as num).toDouble();
+    final collectionResult = await db.rawQuery(
+      'SELECT SUM(amount) as total FROM ${DatabaseTables.collections} WHERE $collectionWhere',
+      collectionArgs
+    );
+
+    double total = 0.0;
+    if (saleInvoiceResult.isNotEmpty && saleInvoiceResult.first['total'] != null) {
+      total += (saleInvoiceResult.first['total'] as num).toDouble();
     }
-    return 0.0;
+    if (returnInvoiceResult.isNotEmpty && returnInvoiceResult.first['total'] != null) {
+      total -= (returnInvoiceResult.first['total'] as num).toDouble();
+    }
+    
+    if (collectionResult.isNotEmpty && collectionResult.first['total'] != null) {
+      total += (collectionResult.first['total'] as num).toDouble();
+    }
+
+    return total;
   }
 
   Future<InvoiceModel?> getInvoiceById(int id) async {

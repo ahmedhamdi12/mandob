@@ -24,6 +24,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
     context.read<ReportsCubit>().loadReports(period: period);
   }
 
+  Future<void> _pickDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: DateTimeRange(
+        start: DateTime.now().subtract(const Duration(days: 7)),
+        end: DateTime.now(),
+      ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
+      final startStr = picked.start.toIso8601String().split('T').first;
+      final endStr = picked.end.toIso8601String().split('T').first;
+      context.read<ReportsCubit>().loadReports(
+        period: ReportPeriod.custom,
+        start: startStr,
+        end: endStr,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,9 +84,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       _buildFilterChip('هذا الشهر', ReportPeriod.thisMonth),
                       const SizedBox(width: 8),
                       _buildFilterChip('كل الوقت', ReportPeriod.allTime),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('تاريخ مخصص'),
+                        selected: context.read<ReportsCubit>().currentPeriod == ReportPeriod.custom,
+                        onSelected: (selected) {
+                          if (selected) {
+                            _pickDateRange();
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),
+                if (state.dateRangeLabel.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    state.dateRangeLabel == 'فترة مخصصة' 
+                      ? 'من: ${context.read<ReportsCubit>().customStartDate} إلى: ${context.read<ReportsCubit>().customEndDate}'
+                      : state.dateRangeLabel,
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 
                 // Profit Summary

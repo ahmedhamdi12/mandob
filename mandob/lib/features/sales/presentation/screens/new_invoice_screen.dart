@@ -11,7 +11,8 @@ import '../../../../core/utils/number_utils.dart';
 import '../../../products/domain/entities/product.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({super.key});
+  final bool isReturn;
+  const NewInvoiceScreen({super.key, this.isReturn = false});
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -72,7 +73,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 
                 if (qty <= 0 || price <= 0) return;
 
-                if (qty > product.stockQty) {
+                if (!widget.isReturn && qty > product.stockQty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('الكمية المطلوبة أكبر من المخزون المتاح!'), backgroundColor: Colors.red),
                   );
@@ -100,7 +101,21 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('فاتورة مبيعات جديدة'),
+        title: Text(widget.isReturn ? 'فاتورة مرتجع جديدة' : 'فاتورة مبيعات جديدة'),
+        actions: [
+          BlocBuilder<NewInvoiceCubit, NewInvoiceState>(
+            builder: (context, state) {
+              if (state is NewInvoiceUpdated && state.items.isNotEmpty) {
+                return TextButton.icon(
+                  icon: const Icon(Icons.save, color: Colors.white),
+                  label: Text(widget.isReturn ? 'حفظ المرتجع' : 'حفظ', style: const TextStyle(color: Colors.white)),
+                  onPressed: () => _saveInvoice(context, state.totalAmount),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
       ),
       body: BlocConsumer<NewInvoiceCubit, NewInvoiceState>(
         listener: (context, state) {
@@ -133,16 +148,22 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   children: [
                     Text('الأصناف', style: Theme.of(context).textTheme.titleLarge),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) => ProductSelectorSheet(
-                            onProductSelected: (product) => _showAddProductDialog(context, product),
-                          ),
-                        );
-                      },
+                      onPressed: state.selectedCustomer == null 
+                        ? () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('الرجاء اختيار العميل أولاً لعرض الأسعار السابقة بشكل صحيح')),
+                            );
+                          }
+                        : () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => ProductSelectorSheet(
+                                onProductSelected: (product) => _showAddProductDialog(context, product),
+                              ),
+                            );
+                          },
                       icon: const Icon(Icons.add),
                       label: const Text('إضافة صنف'),
                     ),
@@ -151,9 +172,17 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 const SizedBox(height: 16),
                 
                 if (state.items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Center(child: Text('لم يتم إضافة أصناف بعد')),
+                  Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Center(
+                      child: Text(
+                        widget.isReturn 
+                          ? 'هذه فاتورة مرتجع، سيتم إعادة المنتجات للمخزون وتقليل مديونية العميل بقيمة الإجمالي.'
+                          : 'لم يتم إضافة منتجات للفاتورة حتى الآن',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ),
                   )
                 else
                   ...state.items.map((item) => InvoiceItemRow(
@@ -190,40 +219,58 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     }
                   },
                 ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _paidAmountController,
-                  decoration: const InputDecoration(labelText: 'المبلغ المدفوع'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                
-                TextField(
-                  controller: _notesController,
-                  decoration: const InputDecoration(labelText: 'ملاحظات (اختياري)'),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 32),
-
-                ElevatedButton(
-                  onPressed: () {
-                    final paid = double.tryParse(_paidAmountController.text) ?? 0;
-                    context.read<NewInvoiceCubit>().saveInvoice(
-                      paidAmount: paid,
-                      notes: _notesController.text,
-                    );
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Text('حفظ الفاتورة', style: TextStyle(fontSize: 18)),
-                  ),
-                ),
               ],
             );
           }
           return const Center(child: CircularProgressIndicator());
         },
+      ),
+    );
+  }
+
+  void _saveInvoice(BuildContext context, double totalAmount) {
+    if (widget.isReturn) {
+      _paidAmountController.text = '0'; // default for returns is 0 paid (just reduces balance)
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(widget.isReturn ? 'حفظ فاتورة المرتجع' : 'حفظ الفاتورة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('الإجمالي: ${NumberUtils.formatCurrency(totalAmount)}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _paidAmountController,
+              decoration: InputDecoration(
+                labelText: widget.isReturn ? 'المبلغ المسترد نقداً للعميل (إن وجد)' : 'المدفوع',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(labelText: 'ملاحظات (اختياري)'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              final paid = double.tryParse(_paidAmountController.text) ?? 0;
+              context.read<NewInvoiceCubit>().saveInvoice(
+                paidAmount: paid,
+                notes: _notesController.text,
+                isReturn: widget.isReturn,
+              );
+              Navigator.pop(ctx);
+            },
+            child: const Text('تأكيد'),
+          ),
+        ],
       ),
     );
   }

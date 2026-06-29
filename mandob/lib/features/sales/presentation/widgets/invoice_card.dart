@@ -17,9 +17,10 @@ class InvoiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isCancelled = invoice.status == 'cancelled';
+    final bool isReturn = invoice.type == 'return';
     
     return Card(
-      color: isCancelled ? Colors.grey[200] : AppColors.surface,
+      color: isCancelled ? Colors.grey[200] : (isReturn ? Colors.red[50] : AppColors.surface),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -36,18 +37,36 @@ class InvoiceCard extends StatelessWidget {
                       decoration: isCancelled ? TextDecoration.lineThrough : null,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isCancelled ? AppColors.error.withValues(alpha: 0.1) : AppColors.success.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      isCancelled ? 'ملغاة' : 'نشطة',
-                      style: AppTextStyles.caption.copyWith(
-                        color: isCancelled ? AppColors.error : AppColors.success,
+                  Row(
+                    children: [
+                      if (isReturn) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'مرتجع',
+                            style: AppTextStyles.caption.copyWith(color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isCancelled ? AppColors.error.withValues(alpha: 0.1) : AppColors.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          isCancelled ? 'ملغاة' : 'نشطة',
+                          style: AppTextStyles.caption.copyWith(
+                            color: isCancelled ? AppColors.error : AppColors.success,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -58,7 +77,7 @@ class InvoiceCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'عميل رقم: ${invoice.customerId}', // Better to pass customer name if available
+                      invoice.customerName ?? 'عميل رقم: ${invoice.customerId}',
                       style: AppTextStyles.bodyMedium,
                     ),
                   ),

@@ -59,15 +59,41 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       appBar: AppBar(
         title: const Text('المبيعات'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              context.push('/invoices/new').then((_) {
-                if (context.mounted) {
-                  _loadData();
-                }
-              });
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'sale') {
+                context.push('/invoices/new').then((_) {
+                  if (context.mounted) _loadData();
+                });
+              } else if (value == 'return') {
+                context.push('/invoices/new-return').then((_) {
+                  if (context.mounted) _loadData();
+                });
+              }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'sale',
+                child: Row(
+                  children: [
+                    Icon(Icons.receipt, color: Colors.blue, size: 20),
+                    SizedBox(width: 8),
+                    Text('فاتورة مبيعات'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'return',
+                child: Row(
+                  children: [
+                    Icon(Icons.assignment_return, color: Colors.red, size: 20),
+                    SizedBox(width: 8),
+                    Text('فاتورة مرتجع'),
+                  ],
+                ),
+              ),
+            ],
+            icon: const Icon(Icons.add),
           ),
         ],
       ),
@@ -177,11 +203,36 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          context.push('/invoices/new').then((_) {
-            if (context.mounted) {
-              _loadData();
-            }
-          });
+          showModalBottomSheet(
+            context: context,
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.receipt, color: Colors.blue),
+                    title: const Text('فاتورة مبيعات جديدة'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      context.push('/invoices/new').then((_) {
+                        if (context.mounted) _loadData();
+                      });
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.assignment_return, color: Colors.red),
+                    title: const Text('فاتورة مرتجع للعميل'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      context.push('/invoices/new-return').then((_) {
+                        if (context.mounted) _loadData();
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
         },
         icon: const Icon(Icons.add),
         label: const Text('فاتورة جديدة'),

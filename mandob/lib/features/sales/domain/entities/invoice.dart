@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 class Invoice extends Equatable {
   final int id;
   final String invoiceNumber;
+  final String type; // sale / return
   final int customerId;
   final String? customerName;
   final String? customerPhone;
@@ -18,6 +19,7 @@ class Invoice extends Equatable {
   const Invoice({
     required this.id,
     required this.invoiceNumber,
+    this.type = 'sale',
     required this.customerId,
     this.customerName,
     this.customerPhone,
@@ -35,6 +37,7 @@ class Invoice extends Equatable {
   List<Object?> get props => [
         id,
         invoiceNumber,
+        type,
         customerId,
         customerName,
         customerPhone,

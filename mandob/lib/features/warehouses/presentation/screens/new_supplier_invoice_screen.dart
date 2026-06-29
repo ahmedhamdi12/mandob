@@ -5,7 +5,7 @@ import '../cubit/supplier_invoice_cubit.dart';
 import '../cubit/supplier_invoice_state.dart';
 import '../cubit/warehouse_cubit.dart';
 import '../cubit/warehouse_state.dart';
-import '../../domain/entities/supplier.dart';
+
 import '../../domain/entities/supplier_invoice.dart';
 import '../../domain/entities/supplier_invoice_item.dart';
 import '../../../../core/utils/date_utils.dart';
@@ -23,7 +23,7 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
   final _invoiceNumberController = TextEditingController();
   final _paidAmountController = TextEditingController(text: '0');
   
-  Supplier? _selectedSupplier;
+  int? _selectedSupplierId;
 
   @override
   void initState() {
@@ -90,14 +90,14 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
   }
 
   void _saveInvoice(double totalAmount) {
-    if (_formKey.currentState!.validate() && _selectedSupplier != null) {
+    if (_formKey.currentState!.validate() && _selectedSupplierId != null) {
       final paidAmount = double.tryParse(_paidAmountController.text) ?? 0;
       final remaining = totalAmount - paidAmount;
 
       final invoice = SupplierInvoice(
         id: 0,
         invoiceNumber: _invoiceNumberController.text,
-        supplierId: _selectedSupplier!.id,
+        supplierId: _selectedSupplierId!,
         type: widget.isReturn ? 'return' : 'purchase',
         invoiceDate: AppDateUtils.getCurrentIso(),
         totalAmount: totalAmount,
@@ -108,7 +108,7 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
       );
 
       context.read<SupplierInvoiceCubit>().createInvoice(invoice);
-    } else if (_selectedSupplier == null) {
+    } else if (_selectedSupplierId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار مورد')));
     }
   }
@@ -127,10 +127,10 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
                 _buildSupplierDropdown(),
@@ -141,7 +141,7 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
                   validator: (val) => val == null || val.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 16),
-                Expanded(child: _buildItemsList()),
+                _buildItemsList(),
                 _buildTotalsAndSave(),
               ],
             ),
@@ -155,11 +155,12 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
     return BlocBuilder<WarehouseCubit, WarehouseState>(
       builder: (context, state) {
         if (state is WarehouseLoaded) {
-          return DropdownButtonFormField<Supplier>(
+          final isIdValid = _selectedSupplierId != null && state.suppliers.any((s) => s.id == _selectedSupplierId);
+          return DropdownButtonFormField<int>(
             decoration: const InputDecoration(labelText: 'المورد', border: OutlineInputBorder()),
-            initialValue: _selectedSupplier,
-            items: state.suppliers.map((s) => DropdownMenuItem<Supplier>(value: s, child: Text(s.name))).toList(),
-            onChanged: (val) => setState(() => _selectedSupplier = val),
+            initialValue: isIdValid ? _selectedSupplierId : null,
+            items: state.suppliers.map((s) => DropdownMenuItem<int>(value: s.id, child: Text(s.name))).toList(),
+            onChanged: (val) => setState(() => _selectedSupplierId = val),
             validator: (val) => val == null ? 'الرجاء اختيار مورد' : null,
           );
         }
@@ -183,30 +184,33 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
                 TextButton.icon(onPressed: _showAddItemDialog, icon: const Icon(Icons.add), label: const Text('إضافة صنف')),
               ],
             ),
-            Expanded(
-              child: items.isEmpty
-                  ? const Center(child: Text('لم يتم إضافة أصناف'))
-                  : ListView.builder(
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return ListTile(
-                          title: Text(item.itemName),
-                          subtitle: Text('${item.qty} x ${item.unitPrice} ج.م'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${item.lineTotal} ج.م', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => context.read<SupplierInvoiceCubit>().removeItem(index),
-                              )
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
+            items.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(child: Text('لم يتم إضافة أصناف')),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return ListTile(
+                        title: Text(item.itemName),
+                        subtitle: Text('${item.qty} x ${item.unitPrice} ج.م'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${item.lineTotal} ج.م', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => context.read<SupplierInvoiceCubit>().removeItem(index),
+                            )
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ],
         );
       },

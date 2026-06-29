@@ -51,7 +51,7 @@ class NewInvoiceCubit extends Cubit<NewInvoiceState> {
         qtyUnits: qtyUnits,
         displayQty: displayQty,
         unitPrice: unitPrice,
-        costAtSale: product.averageCost,
+        costAtSale: 0.0,
         lineTotal: displayQty * unitPrice,
       );
     } else {
@@ -63,7 +63,7 @@ class NewInvoiceCubit extends Cubit<NewInvoiceState> {
         qtyUnits: qtyUnits,
         displayQty: displayQty,
         unitPrice: unitPrice,
-        costAtSale: product.averageCost,
+        costAtSale: 0.0,
         lineTotal: displayQty * unitPrice,
       ));
     }
@@ -102,7 +102,7 @@ class NewInvoiceCubit extends Cubit<NewInvoiceState> {
     ));
   }
 
-  Future<void> saveInvoice({required double paidAmount, String? notes}) async {
+  Future<void> saveInvoice({required double paidAmount, String? notes, bool isReturn = false}) async {
     if (_selectedCustomer == null || _items.isEmpty) {
       emit(const NewInvoiceError('تأكد من اختيار عميل وإضافة منتجات'));
       _emitUpdatedState();
@@ -118,11 +118,13 @@ class NewInvoiceCubit extends Cubit<NewInvoiceState> {
       final invoiceDate = AppDateUtils.getCurrentIso();
       final dateStr = DateFormat('yyyyMMdd').format(DateTime.now());
       final randomStr = Random().nextInt(999).toString().padLeft(3, '0');
-      final invoiceNumber = 'INV-$dateStr-$randomStr';
+      final prefix = isReturn ? 'RET' : 'INV';
+      final invoiceNumber = '$prefix-$dateStr-$randomStr';
 
       final invoice = Invoice(
         id: 0,
         invoiceNumber: invoiceNumber,
+        type: isReturn ? 'return' : 'sale',
         customerId: _selectedCustomer!.id,
         invoiceDate: invoiceDate,
         totalAmount: total,

@@ -18,9 +18,15 @@ import 'features/backup/presentation/cubit/backup_cubit.dart';
 import 'features/warehouses/presentation/cubit/warehouse_cubit.dart';
 import 'features/warehouses/presentation/cubit/supplier_invoice_cubit.dart';
 
+import 'core/database/database_helper.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initServiceLocator();
+  
+  // Clean up data inconsistencies (One time run)
+  await sl<DatabaseHelper>().syncFIFOStock();
+  
   runApp(const MainApp());
 }
 
@@ -30,7 +36,7 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
-      providers: [  
+      providers: [
         BlocProvider(create: (context) => sl<ProductCubit>()),
         BlocProvider(create: (context) => sl<CustomerCubit>()),
         BlocProvider(create: (context) => sl<StockCubit>()),

@@ -27,6 +27,7 @@ import '../../features/stock/data/repositories/stock_repository_impl.dart';
 import '../../features/stock/domain/repositories/stock_repository.dart';
 import '../../features/stock/domain/usecases/add_stock_purchase.dart';
 import '../../features/stock/domain/usecases/get_stock_movements.dart';
+import '../../features/stock/domain/usecases/return_stock.dart';
 import '../../features/stock/presentation/cubit/stock_cubit.dart';
 
 // Sales
@@ -157,10 +158,12 @@ Future<void> initServiceLocator() async {
   // Use cases
   sl.registerLazySingleton(() => AddStockPurchase(sl()));
   sl.registerLazySingleton(() => GetStockMovements(sl()));
+  sl.registerLazySingleton(() => ReturnStock(sl()));
 
   // Cubit
   sl.registerFactory(() => StockCubit(
         addStockPurchaseUseCase: sl(),
+        returnStockUseCase: sl(),
       ));
 
   // Features - Sales

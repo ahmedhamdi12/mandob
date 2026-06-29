@@ -12,33 +12,18 @@ class StockLocalDataSource {
     final db = await dbHelper.database;
     
     return await db.transaction((txn) async {
-      // 1. Get current product info for WAC calculation
+      // 1. Get current product info
       final List<Map<String, dynamic>> productResult = await txn.query(
         DatabaseTables.products,
-        columns: ['stock_qty', 'average_cost'],
+        columns: ['stock_qty'],
         where: 'id = ?',
         whereArgs: [purchase.productId],
       );
 
-      if (productResult.isEmpty) {
-        throw Exception('Product not found');
-      }
-
       final currentQty = productResult.first['stock_qty'] as int;
-      final currentAvgCost = (productResult.first['average_cost'] as num).toDouble();
 
-      // 2. Calculate new WAC
       final newQty = purchase.qtyUnits;
-      final newCost = purchase.costPerUnit;
-      
-      final totalCurrentValue = currentQty * currentAvgCost;
-      final totalNewValue = newQty * newCost;
       final totalQty = currentQty + newQty;
-
-      double newWac = currentAvgCost;
-      if (totalQty > 0) {
-        newWac = (totalCurrentValue + totalNewValue) / totalQty;
-      }
 
       // 3. Insert Purchase Record
       final purchaseMap = purchase.toMap();
@@ -64,12 +49,11 @@ class StockLocalDataSource {
         movement.toMap(),
       );
 
-      // 5. Update Product Stock and WAC
+      // 5. Update Product Stock
       await txn.update(
         DatabaseTables.products,
         {
           'stock_qty': totalQty,
-          'average_cost': newWac,
         },
         where: 'id = ?',
         whereArgs: [purchase.productId],
@@ -101,5 +85,83 @@ class StockLocalDataSource {
     );
 
     return maps.map((e) => StockPurchaseModel.fromMap(e)).toList();
+  }
+  
+  Future<void> returnStock(int productId, int qty) async {
+    final db = await dbHelper.database;
+    
+    await db.transaction((txn) async {
+      // 1. Get current product info
+      final List<Map<String, dynamic>> productResult = await txn.query(
+        DatabaseTables.products,
+        columns: ['stock_qty'],
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+
+      if (productResult.isEmpty) {
+        throw Exception('Product not found');
+      }
+
+      final currentQty = productResult.first['stock_qty'] as int;
+      if (currentQty < qty) {
+        throw Exception('الكمية المراد إرجاعها أكبر من المخزون المتاح');
+      }
+
+      // 2. Insert Movement Record
+      await txn.insert(
+        DatabaseTables.stockMovements,
+        {
+          'product_id': productId,
+          'type': 'stock_return',
+          'qty': -qty,
+          'created_at': DateTime.now().toIso8601String(),
+        }
+      );
+
+      // 3. Update Product Stock
+      await txn.update(
+        DatabaseTables.products,
+        {
+          'stock_qty': currentQty - qty,
+        },
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+
+      // 4. Deduct from stock_purchases (FIFO)
+      int qtyToDeduct = qty;
+      final batches = await txn.query(
+        DatabaseTables.stockPurchases,
+        where: 'product_id = ? AND remaining_qty > 0',
+        whereArgs: [productId],
+        orderBy: 'purchase_date ASC, id ASC',
+      );
+
+      for (var batch in batches) {
+        if (qtyToDeduct <= 0) break;
+
+        final batchId = batch['id'] as int;
+        final batchRemaining = batch['remaining_qty'] as int;
+
+        if (batchRemaining >= qtyToDeduct) {
+          await txn.update(
+            DatabaseTables.stockPurchases,
+            {'remaining_qty': batchRemaining - qtyToDeduct},
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+          qtyToDeduct = 0;
+        } else {
+          qtyToDeduct -= batchRemaining;
+          await txn.update(
+            DatabaseTables.stockPurchases,
+            {'remaining_qty': 0},
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+        }
+      }
+    });
   }
 }

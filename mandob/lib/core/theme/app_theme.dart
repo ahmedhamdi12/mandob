@@ -24,6 +24,11 @@ class AppTheme {
         centerTitle: true,
         titleTextStyle: AppTextStyles.h3.copyWith(color: AppColors.onPrimary),
       ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: Colors.black,
+        unselectedLabelColor: Colors.white70,
+        indicatorColor: Colors.black,
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.secondary,

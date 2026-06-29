@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -41,6 +41,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       await _createWarehouseTables(db);
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE ${DatabaseTables.invoices} ADD COLUMN type TEXT NOT NULL DEFAULT "sale"');
     }
   }
 
@@ -92,6 +95,7 @@ class DatabaseHelper {
       CREATE TABLE ${DatabaseTables.invoices} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_number TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL DEFAULT 'sale',
         customer_id INTEGER NOT NULL,
         invoice_date TEXT NOT NULL,
         total_amount REAL NOT NULL DEFAULT 0,
@@ -270,5 +274,70 @@ class DatabaseHelper {
         FOREIGN KEY (supplier_id) REFERENCES ${DatabaseTables.suppliers}(id)
       )
     ''');
+  }
+
+  // --- Utility method to fix out-of-sync batches (Data cleanup tool) ---
+  Future<void> syncFIFOStock() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final products = await txn.query(DatabaseTables.products, columns: ['id', 'stock_qty']);
+      
+      for (var product in products) {
+        final productId = product['id'] as int;
+        final stockQty = product['stock_qty'] as int;
+        
+        // Find how many batches we have
+        final batches = await txn.query(
+          DatabaseTables.stockPurchases,
+          where: 'product_id = ?',
+          whereArgs: [productId],
+          orderBy: 'purchase_date DESC, id DESC',
+        );
+
+        int remainingToAllocate = stockQty;
+        
+        for (var batch in batches) {
+          final batchId = batch['id'] as int;
+          final qtyUnits = batch['qty_units'] as int;
+          
+          int newRemaining = 0;
+          if (remainingToAllocate > 0) {
+            if (remainingToAllocate >= qtyUnits) {
+              newRemaining = qtyUnits;
+              remainingToAllocate -= qtyUnits;
+            } else {
+              newRemaining = remainingToAllocate;
+              remainingToAllocate = 0;
+            }
+          }
+          
+          await txn.update(
+            DatabaseTables.stockPurchases,
+            {'remaining_qty': newRemaining},
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+        }
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveInventoryBatches() async {
+    final db = await database;
+    final sql = '''
+      SELECT 
+        p.id as product_id,
+        p.name as product_name,
+        p.base_unit,
+        sp.purchase_date,
+        sp.remaining_qty,
+        sp.cost_per_unit,
+        (sp.remaining_qty * sp.cost_per_unit) as batch_value
+      FROM ${DatabaseTables.stockPurchases} sp
+      JOIN ${DatabaseTables.products} p ON sp.product_id = p.id
+      WHERE sp.remaining_qty > 0 AND p.is_deleted = 0
+      ORDER BY p.name ASC, sp.purchase_date ASC
+    ''';
+    return await db.rawQuery(sql);
   }
 }

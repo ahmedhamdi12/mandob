@@ -16,7 +16,9 @@ class ProductLocalDataSource {
       SELECT p.*, 
         (SELECT cost_per_unit FROM ${DatabaseTables.stockPurchases} 
          WHERE product_id = p.id 
-         ORDER BY purchase_date DESC, id DESC LIMIT 1) as last_purchase_price
+         ORDER BY purchase_date DESC, id DESC LIMIT 1) as last_purchase_price,
+        (SELECT SUM(remaining_qty * cost_per_unit) FROM ${DatabaseTables.stockPurchases}
+         WHERE product_id = p.id AND remaining_qty > 0) as inventory_value
       FROM ${DatabaseTables.products} p
       WHERE p.is_deleted = 0
     ''';
@@ -36,7 +38,9 @@ class ProductLocalDataSource {
       SELECT p.*, 
         (SELECT cost_per_unit FROM ${DatabaseTables.stockPurchases} 
          WHERE product_id = p.id 
-         ORDER BY purchase_date DESC, id DESC LIMIT 1) as last_purchase_price
+         ORDER BY purchase_date DESC, id DESC LIMIT 1) as last_purchase_price,
+        (SELECT SUM(remaining_qty * cost_per_unit) FROM ${DatabaseTables.stockPurchases}
+         WHERE product_id = p.id AND remaining_qty > 0) as inventory_value
       FROM ${DatabaseTables.products} p
       WHERE p.id = ? AND p.is_deleted = 0
     ''';

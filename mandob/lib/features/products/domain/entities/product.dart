@@ -6,7 +6,8 @@ class Product extends Equatable {
   final String baseUnit;
   final int lowStockThreshold;
   final int stockQty;
-  final double averageCost;
+  final double fifoInventoryValue;
+  final double calculatedUnitCost;
   final bool isDeleted;
   final String createdAt;
   final double? lastPurchasePrice;
@@ -17,7 +18,8 @@ class Product extends Equatable {
     this.baseUnit = 'قطعة',
     this.lowStockThreshold = 10,
     this.stockQty = 0,
-    this.averageCost = 0.0,
+    this.fifoInventoryValue = 0.0,
+    this.calculatedUnitCost = 0.0,
     this.isDeleted = false,
     required this.createdAt,
     this.lastPurchasePrice,
@@ -30,7 +32,8 @@ class Product extends Equatable {
         baseUnit,
         lowStockThreshold,
         stockQty,
-        averageCost,
+        fifoInventoryValue,
+        calculatedUnitCost,
         isDeleted,
         createdAt,
         lastPurchasePrice,

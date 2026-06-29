@@ -4,9 +4,11 @@ import '../../main_shell.dart';
 import '../../features/products/presentation/screens/products_screen.dart';
 import '../../features/products/presentation/screens/add_edit_product_screen.dart';
 import '../../features/products/presentation/screens/product_detail_screen.dart';
+import '../../features/products/presentation/screens/inventory_audit_screen.dart';
 import '../../features/customers/presentation/screens/customers_screen.dart';
 import '../../features/customers/presentation/screens/add_edit_customer_screen.dart';
 import '../../features/stock/presentation/screens/stock_entry_screen.dart';
+import '../../features/stock/presentation/screens/stock_return_screen.dart';
 import '../../features/sales/presentation/screens/invoices_screen.dart';
 import '../../features/sales/presentation/screens/new_invoice_screen.dart';
 import '../../features/sales/presentation/screens/invoice_details_screen.dart';
@@ -72,6 +74,10 @@ final appRouter = GoRouter(
       builder: (context, state) => ProductDetailScreen(productId: int.parse(state.pathParameters['id']!)),
     ),
     GoRoute(
+      path: '/products/inventory',
+      builder: (context, state) => const InventoryAuditScreen(),
+    ),
+    GoRoute(
       path: '/customers/add',
       builder: (context, state) => const AddEditCustomerScreen(),
     ),
@@ -83,10 +89,18 @@ final appRouter = GoRouter(
       path: '/stock/entry',
       builder: (context, state) => const StockEntryScreen(),
     ),
+    GoRoute(
+      path: '/stock/return',
+      builder: (context, state) => const StockReturnScreen(),
+    ),
 
     GoRoute(
       path: '/invoices/new',
-      builder: (context, state) => const NewInvoiceScreen(),
+      builder: (context, state) => const NewInvoiceScreen(isReturn: false),
+    ),
+    GoRoute(
+      path: '/invoices/new-return',
+      builder: (context, state) => const NewInvoiceScreen(isReturn: true),
     ),
     GoRoute(
       path: '/invoices/details/:id',

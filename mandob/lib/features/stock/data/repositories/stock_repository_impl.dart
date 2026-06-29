@@ -19,4 +19,9 @@ class StockRepositoryImpl implements StockRepository {
   Future<List<StockMovement>> getStockMovements(int productId) async {
     return await localDataSource.getStockMovements(productId);
   }
+
+  @override
+  Future<void> returnStock(int productId, int qty) async {
+    await localDataSource.returnStock(productId, qty);
+  }
 }

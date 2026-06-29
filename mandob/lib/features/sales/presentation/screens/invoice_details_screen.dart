@@ -103,6 +103,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     sb.writeln('المدفوع: ${NumberUtils.formatCurrency(_invoice!.paidAmount)}');
     sb.writeln('المتبقي: ${NumberUtils.formatCurrency(_invoice!.remaining)}');
     
+    // ignore: deprecated_member_use
     Share.share(sb.toString());
   }
 

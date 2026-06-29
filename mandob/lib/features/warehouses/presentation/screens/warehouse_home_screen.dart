@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../cubit/warehouse_cubit.dart';
 import '../cubit/warehouse_state.dart';
 import '../../../../core/utils/date_utils.dart';
+import '../../domain/entities/supplier_payment.dart';
 
 class WarehouseHomeScreen extends StatefulWidget {
   const WarehouseHomeScreen({super.key});
@@ -70,7 +71,10 @@ class _WarehouseHomeScreenState extends State<WarehouseHomeScreen> with SingleTi
           } else if (_tabController.index == 1) {
             _showNewInvoiceOptions(context);
           } else if (_tabController.index == 2) {
-             // context.push('/warehouses/payments/new'); // Not implemented directly here yet, maybe from supplier details
+             final state = context.read<WarehouseCubit>().state;
+             if (state is WarehouseLoaded) {
+               _showNewPaymentDialog(context, state.suppliers);
+             }
           }
         },
         child: const Icon(Icons.add),
@@ -104,6 +108,70 @@ class _WarehouseHomeScreenState extends State<WarehouseHomeScreen> with SingleTi
           ],
         ),
       ),
+    );
+  }
+
+  void _showNewPaymentDialog(BuildContext context, List<dynamic> suppliers) {
+    int? selectedSupplierId;
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('تسجيل دفعة لمورد'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(labelText: 'المورد', border: OutlineInputBorder()),
+                    initialValue: selectedSupplierId,
+                    items: suppliers.map((s) => DropdownMenuItem<int>(value: s.id, child: Text(s.name))).toList(),
+                    onChanged: (val) => setState(() => selectedSupplierId = val),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'المبلغ', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(labelText: 'ملاحظات (اختياري)', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+                ElevatedButton(
+                  onPressed: () {
+                    final amount = double.tryParse(amountController.text) ?? 0;
+                    if (selectedSupplierId != null && amount > 0) {
+                      final payment = SupplierPayment(
+                        id: 0,
+                        supplierId: selectedSupplierId!,
+                        amount: amount,
+                        paymentDate: AppDateUtils.getCurrentIso(),
+                        notes: notesController.text.isNotEmpty ? notesController.text : null,
+                        createdAt: AppDateUtils.getCurrentIso(),
+                      );
+                      context.read<WarehouseCubit>().addPayment(payment);
+                      Navigator.pop(dialogContext);
+                    } else if (selectedSupplierId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار مورد')));
+                    }
+                  },
+                  child: const Text('حفظ'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

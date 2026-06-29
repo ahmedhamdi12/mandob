@@ -29,6 +29,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
         title: const Text('المنتجات'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.fact_check),
+            tooltip: 'جرد المخزون',
+            onPressed: () {
+              context.push('/products/inventory');
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
               context.push('/products/add').then((_) {
