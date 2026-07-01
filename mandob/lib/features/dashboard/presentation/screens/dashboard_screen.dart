@@ -141,6 +141,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (state is DashboardLoading) {
             return const Center(child: CircularProgressIndicator());
           } else if (state is DashboardLoaded) {
+            final now = DateTime.now();
+            final monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+            final currentMonthName = '${monthNames[now.month - 1]} ${now.year}';
+
             return RefreshIndicator(
               onRefresh: () async {
                 await context.read<DashboardCubit>().loadDashboardData();
@@ -148,7 +152,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Text('ملخص اليوم', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  // Today's Sales quick view
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('مبيعات اليوم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(
+                          NumberUtils.formatCurrency(state.todaySales),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  Text('ملخص شهر $currentMonthName', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -161,20 +187,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     itemCount: 5,
                     itemBuilder: (context, index) {
                       if (index == 0) {
-                        return _buildStatCard(context, title: 'مبيعات اليوم', amount: state.todaySales, icon: Icons.storefront, color: AppColors.primary);
+                        return _buildStatCard(context, title: 'مبيعات الشهر', amount: state.monthlySales, icon: Icons.storefront, color: AppColors.primary);
                       } else if (index == 1) {
-                        return _buildStatCard(context, title: 'كاش اليوم', amount: state.todayCash, icon: Icons.payments, color: AppColors.primary);
+                        return _buildStatCard(context, title: 'تحصيلات الشهر', amount: state.monthlyCash, icon: Icons.payments, color: AppColors.primary);
                       } else if (index == 2) {
-                        return _buildStatCard(context, title: 'المصروفات', amount: state.todayExpenses, icon: Icons.money_off, color: AppColors.error);
+                        return _buildStatCard(context, title: 'مصروفات الشهر', amount: state.monthlyExpenses, icon: Icons.money_off, color: AppColors.error);
                       } else if (index == 3) {
-                        return _buildStatCard(context, title: 'الصافي', amount: state.netResult, icon: Icons.account_balance_wallet, color: state.netResult >= 0 ? Colors.green : Colors.red);
+                        return _buildStatCard(context, title: 'صافي الشهر', amount: state.monthlyNetResult, icon: Icons.account_balance_wallet, color: state.monthlyNetResult >= 0 ? Colors.green : Colors.red);
                       } else {
                         return _buildStatCard(context, title: 'إجمالي المديونيات', amount: state.totalDebts, icon: Icons.warning_amber_rounded, color: AppColors.error);
                       }
                     },
                   ),
+                  
                   const SizedBox(height: 32),
                   const Text('إجراءات سريعة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
                   Wrap(
                     spacing: 16,
                     runSpacing: 16,
@@ -187,6 +215,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _buildActionBtn(context, 'مرتجع للمخزن', Icons.assignment_return, () => context.push('/stock/return')),
                     ],
                   ),
+
+                  if (state.previousMonths.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    const Text('الأشهر السابقة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    ...state.previousMonths.map((month) {
+                      final parts = month.yearMonth.split('-');
+                      final mIndex = int.parse(parts[1]) - 1;
+                      final mName = '${monthNames[mIndex]} ${parts[0]}';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
+                            child: const Icon(Icons.calendar_month, color: AppColors.secondary),
+                          ),
+                          title: Text(mName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('المبيعات: ${NumberUtils.formatCurrency(month.sales)} | المصروفات: ${NumberUtils.formatCurrency(month.expenses)}'),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('الصافي', style: TextStyle(fontSize: 12)),
+                              Text(
+                                NumberUtils.formatCurrency(month.netResult),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: month.netResult >= 0 ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            context.push('/dashboard/month/${month.yearMonth}');
+                          },
+                        ),
+                      );
+                    }),
+                  ],
+                  const SizedBox(height: 24),
                 ],
               ),
             );

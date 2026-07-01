@@ -16,10 +16,42 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
+  String? _selectedMonth;
+
   @override
   void initState() {
     super.initState();
-    context.read<ExpenseCubit>().loadExpenses();
+    final now = DateTime.now();
+    _selectedMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    _loadData();
+  }
+
+  void _loadData() {
+    context.read<ExpenseCubit>().loadExpenses(
+      startDate: '$_selectedMonth-01',
+      endDate: '$_selectedMonth-31',
+    );
+  }
+
+  Future<void> _pickMonth() async {
+    final now = DateTime.now();
+    final initialDate = _selectedMonth != null 
+        ? DateTime.parse('$_selectedMonth-01') 
+        : now;
+        
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDatePickerMode: DatePickerMode.year,
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedMonth = '${picked.year}-${picked.month.toString().padLeft(2, '0')}';
+      });
+      _loadData();
+    }
   }
 
   @override
@@ -27,6 +59,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('المصروفات'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: _pickMonth,
+          ),
+        ],
       ),
       body: BlocConsumer<ExpenseCubit, ExpenseState>(
         listener: (context, state) {
@@ -52,7 +90,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   color: AppColors.primary.withValues(alpha: 0.1),
                   child: Column(
                     children: [
-                      const Text('إجمالي المصروفات', style: TextStyle(fontSize: 16)),
+                      Text('إجمالي مصروفات ($_selectedMonth)', style: const TextStyle(fontSize: 16)),
                       Text(
                         NumberUtils.formatCurrency(state.totalAmount),
                         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),

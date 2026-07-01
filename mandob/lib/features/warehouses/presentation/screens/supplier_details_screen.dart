@@ -18,7 +18,8 @@ class SupplierDetailsScreen extends StatelessWidget {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        final supplier = state.suppliers.firstWhere((s) => s.id == supplierId, orElse: () => null);
+        final matches = state.suppliers.where((s) => s.id == supplierId);
+        final supplier = matches.isNotEmpty ? matches.first : null;
         if (supplier == null) {
           return const Scaffold(body: Center(child: Text('المورد غير موجود')));
         }
@@ -37,7 +38,8 @@ class SupplierDetailsScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       const TabBar(
-                        labelColor: Colors.blue,
+                        labelColor: Colors.green,
+                        unselectedLabelColor: Colors.green,
                         tabs: [
                           Tab(text: 'الفواتير'),
                           Tab(text: 'المدفوعات'),

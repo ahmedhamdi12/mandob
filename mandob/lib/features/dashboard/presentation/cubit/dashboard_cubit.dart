@@ -22,21 +22,50 @@ class DashboardCubit extends Cubit<DashboardState> {
   Future<void> loadDashboardData() async {
     emit(DashboardLoading());
     try {
+      final now = DateTime.now();
       final todayStr = AppDateUtils.getCurrentIso().split('T').first;
+      final currentMonthStr = '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
+      // Today's specific data
       final todaySales = await getTotalSalesUseCase(date: todayStr);
-      final todayCash = await getTotalCashUseCase(date: todayStr);
-      final todayExpenses = await getTotalExpensesUseCase(date: todayStr);
+
+      // Current month's data
+      final monthlySales = await getTotalSalesUseCase(date: currentMonthStr);
+      final monthlyCash = await getTotalCashUseCase(date: currentMonthStr);
+      final monthlyExpenses = await getTotalExpensesUseCase(date: currentMonthStr);
       final totalDebts = await getTotalDebtsUseCase();
       
-      final netResult = todaySales - todayExpenses;
+      final monthlyNetResult = monthlySales - monthlyExpenses;
+
+      // Previous 6 months data
+      List<MonthSummary> previousMonths = [];
+      for (int i = 1; i <= 6; i++) {
+        var pastMonthDate = DateTime(now.year, now.month - i, 1);
+        String yearMonthStr = '${pastMonthDate.year}-${pastMonthDate.month.toString().padLeft(2, '0')}';
+        
+        final pastSales = await getTotalSalesUseCase(date: yearMonthStr);
+        final pastExpenses = await getTotalExpensesUseCase(date: yearMonthStr);
+        final pastNetResult = pastSales - pastExpenses;
+        
+        // Only add if there is data
+        if (pastSales > 0 || pastExpenses > 0) {
+          previousMonths.add(MonthSummary(
+            yearMonth: yearMonthStr,
+            sales: pastSales,
+            expenses: pastExpenses,
+            netResult: pastNetResult,
+          ));
+        }
+      }
       
       emit(DashboardLoaded(
         todaySales: todaySales,
-        todayCash: todayCash,
-        todayExpenses: todayExpenses,
-        netResult: netResult,
+        monthlySales: monthlySales,
+        monthlyCash: monthlyCash,
+        monthlyExpenses: monthlyExpenses,
+        monthlyNetResult: monthlyNetResult,
         totalDebts: totalDebts,
+        previousMonths: previousMonths,
       ));
     } catch (e) {
       emit(DashboardError(e.toString()));

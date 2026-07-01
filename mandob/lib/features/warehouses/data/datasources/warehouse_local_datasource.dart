@@ -96,12 +96,100 @@ class WarehouseLocalDataSource {
         final itemMap = item.toMap();
         itemMap['invoice_id'] = invoiceId;
         await txn.insert(DatabaseTables.supplierInvoiceItems, itemMap);
+
+        // --- Stock Update Integration ---
+        if (item.productId != null) {
+          final productResult = await txn.query(
+            DatabaseTables.products,
+            columns: ['stock_qty'],
+            where: 'id = ?',
+            whereArgs: [item.productId],
+          );
+
+          if (productResult.isNotEmpty) {
+            final currentQty = productResult.first['stock_qty'] as int;
+            final qtyChange = invoice.type == 'purchase' ? item.qtyUnits : -item.qtyUnits;
+            
+            if (invoice.type == 'return' && currentQty < item.qtyUnits) {
+              throw Exception('الكمية المراد إرجاعها أكبر من المخزون المتاح للمنتج: ${item.itemName}');
+            }
+
+            // Update Product Stock
+            await txn.update(
+              DatabaseTables.products,
+              {'stock_qty': currentQty + qtyChange},
+              where: 'id = ?',
+              whereArgs: [item.productId],
+            );
+
+            // Record Movement
+            await txn.insert(
+              DatabaseTables.stockMovements,
+              {
+                'product_id': item.productId,
+                'type': invoice.type == 'purchase' ? 'supplier_purchase' : 'supplier_return',
+                'qty': qtyChange,
+                'reference_id': invoiceId,
+                'created_at': DateTime.now().toIso8601String(),
+              },
+            );
+
+            // If Purchase, insert into stock_purchases for FIFO
+            if (invoice.type == 'purchase') {
+              final costPerUnit = item.qtyUnits > 0 ? (item.lineTotal / item.qtyUnits) : 0.0;
+              await txn.insert(
+                DatabaseTables.stockPurchases,
+                {
+                  'product_id': item.productId,
+                  'qty_units': item.qtyUnits,
+                  'cost_per_unit': costPerUnit,
+                  'purchase_date': invoice.invoiceDate,
+                  'remaining_qty': item.qtyUnits,
+                  'created_at': DateTime.now().toIso8601String(),
+                },
+              );
+            } else if (invoice.type == 'return') {
+              // Deduct from stock_purchases (FIFO)
+              int qtyToDeduct = item.qtyUnits;
+              final batches = await txn.query(
+                DatabaseTables.stockPurchases,
+                where: 'product_id = ? AND remaining_qty > 0',
+                whereArgs: [item.productId],
+                orderBy: 'purchase_date ASC, id ASC',
+              );
+
+              for (var batch in batches) {
+                if (qtyToDeduct <= 0) break;
+                final batchId = batch['id'] as int;
+                final batchRemaining = batch['remaining_qty'] as int;
+
+                if (batchRemaining >= qtyToDeduct) {
+                  await txn.update(
+                    DatabaseTables.stockPurchases,
+                    {'remaining_qty': batchRemaining - qtyToDeduct},
+                    where: 'id = ?',
+                    whereArgs: [batchId],
+                  );
+                  qtyToDeduct = 0;
+                } else {
+                  qtyToDeduct -= batchRemaining;
+                  await txn.update(
+                    DatabaseTables.stockPurchases,
+                    {'remaining_qty': 0},
+                    where: 'id = ?',
+                    whereArgs: [batchId],
+                  );
+                }
+              }
+            }
+          }
+        }
       }
 
       // 3. Update supplier balance
-      // If purchase, you owe them more (+ remaining)
-      // If return, you owe them less (- remaining)
-      final balanceChange = invoice.type == 'purchase' ? invoice.remaining : -invoice.remaining;
+      // If purchase, you owe them more (- remaining)
+      // If return, you owe them less (+ remaining)
+      final balanceChange = invoice.type == 'purchase' ? -invoice.remaining : invoice.remaining;
       
       if (balanceChange != 0) {
         await txn.rawUpdate(
@@ -173,6 +261,7 @@ class WarehouseLocalDataSource {
 
   Future<void> cancelSupplierInvoice(int invoiceId) async {
     final db = await dbHelper.database;
+    bool needSync = false;
     
     await db.transaction((txn) async {
       // Check if already cancelled
@@ -191,7 +280,7 @@ class WarehouseLocalDataSource {
       final type = invoiceMap.first['type'] as String;
 
       // Reverse supplier balance
-      final balanceChange = type == 'purchase' ? -remaining : remaining;
+      final balanceChange = type == 'purchase' ? remaining : -remaining;
       
       if (balanceChange != 0) {
         await txn.rawUpdate(
@@ -207,7 +296,67 @@ class WarehouseLocalDataSource {
         where: 'id = ?',
         whereArgs: [invoiceId]
       );
+
+      // --- Stock Reversion Integration ---
+      final items = await txn.query(
+        DatabaseTables.supplierInvoiceItems,
+        where: 'invoice_id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      for (var itemMap in items) {
+        final productId = itemMap['product_id'] as int?;
+        if (productId != null) {
+          final qtyUnits = itemMap['qty_units'] as int;
+          
+          final productResult = await txn.query(
+            DatabaseTables.products,
+            columns: ['stock_qty'],
+            where: 'id = ?',
+            whereArgs: [productId],
+          );
+
+          if (productResult.isNotEmpty) {
+            final currentQty = productResult.first['stock_qty'] as int;
+            final qtyChange = type == 'purchase' ? -qtyUnits : qtyUnits;
+            
+            if (type == 'purchase' && currentQty < qtyUnits) {
+               throw Exception('لا يمكن إلغاء الفاتورة لأن الكمية المشتراة تم سحب جزء منها من المخزون: ${itemMap['item_name']}');
+            }
+
+            // Update Product Stock
+            await txn.update(
+              DatabaseTables.products,
+              {'stock_qty': currentQty + qtyChange},
+              where: 'id = ?',
+              whereArgs: [productId],
+            );
+
+            // Record Movement
+            await txn.insert(
+              DatabaseTables.stockMovements,
+              {
+                'product_id': productId,
+                'type': type == 'purchase' ? 'supplier_purchase_cancel' : 'supplier_return_cancel',
+                'qty': qtyChange,
+                'reference_id': invoiceId,
+                'created_at': DateTime.now().toIso8601String(),
+              },
+            );
+
+            // If it's a purchase cancellation, we might have a stock_purchases record that needs to be invalidated
+            // We'll run a sync at the end to fix the FIFO remaining_qty for all updated products.
+            needSync = true;
+          }
+        }
+      }
     });
+
+    // Run FIFO sync outside the transaction to fix remaining quantities
+    // (since we just run it for all products, we just call the helper method)
+    if (needSync) {
+      await dbHelper.syncFIFOStock();
+    }
   }
 
   // --- Supplier Payments ---
@@ -221,9 +370,9 @@ class WarehouseLocalDataSource {
         payment.toMap(),
       );
 
-      // Decrease supplier balance (you paid them, so you owe less)
+      // Increase supplier balance (you paid them, so debt decreases/balance becomes more positive)
       await txn.rawUpdate(
-        'UPDATE ${DatabaseTables.suppliers} SET current_balance = current_balance - ? WHERE id = ?',
+        'UPDATE ${DatabaseTables.suppliers} SET current_balance = current_balance + ? WHERE id = ?',
         [payment.amount, payment.supplierId],
       );
 
@@ -262,11 +411,11 @@ class WarehouseLocalDataSource {
   Future<double> getTotalSupplierDebts() async {
     final db = await dbHelper.database;
     final result = await db.rawQuery(
-      'SELECT SUM(current_balance) as total FROM ${DatabaseTables.suppliers} WHERE current_balance > 0'
+      'SELECT SUM(current_balance) as total FROM ${DatabaseTables.suppliers} WHERE current_balance < 0'
     );
     
     if (result.isNotEmpty && result.first['total'] != null) {
-      return (result.first['total'] as num).toDouble();
+      return (result.first['total'] as num).toDouble().abs();
     }
     return 0.0;
   }

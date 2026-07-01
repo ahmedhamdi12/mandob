@@ -17,10 +17,39 @@ class CollectionsScreen extends StatefulWidget {
 }
 
 class _CollectionsScreenState extends State<CollectionsScreen> {
+  String? _selectedMonth;
+
   @override
   void initState() {
     super.initState();
-    context.read<CollectionCubit>().loadCollections();
+    final now = DateTime.now();
+    _selectedMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    _loadData();
+  }
+
+  void _loadData() {
+    context.read<CollectionCubit>().loadCollections(date: _selectedMonth);
+  }
+
+  Future<void> _pickMonth() async {
+    final now = DateTime.now();
+    final initialDate = _selectedMonth != null 
+        ? DateTime.parse('$_selectedMonth-01') 
+        : now;
+        
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDatePickerMode: DatePickerMode.year,
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedMonth = '${picked.year}-${picked.month.toString().padLeft(2, '0')}';
+      });
+      _loadData();
+    }
   }
 
   @override
@@ -28,6 +57,12 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('التحصيلات'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: _pickMonth,
+          ),
+        ],
       ),
       body: BlocConsumer<CollectionCubit, CollectionState>(
         listener: (context, state) {
@@ -53,7 +88,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                   color: AppColors.success.withValues(alpha: 0.1),
                   child: Column(
                     children: [
-                      const Text('إجمالي التحصيلات', style: TextStyle(fontSize: 16)),
+                      Text('إجمالي تحصيلات ($_selectedMonth)', style: const TextStyle(fontSize: 16)),
                       Text(
                         NumberUtils.formatCurrency(state.totalAmount),
                         style: const TextStyle(

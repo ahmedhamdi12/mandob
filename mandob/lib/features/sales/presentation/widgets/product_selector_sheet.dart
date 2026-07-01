@@ -78,8 +78,8 @@ class _ProductSelectorSheetState extends State<ProductSelectorSheet> {
                               'الكمية المتاحة: ${product.stockQty} ${product.baseUnit}',
                             ),
                             onTap: () {
-                              widget.onProductSelected(product);
                               Navigator.pop(context);
+                              widget.onProductSelected(product);
                             },
                           );
                         },

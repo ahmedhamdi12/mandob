@@ -20,6 +20,7 @@ class _AddEditSupplierScreenState extends State<AddEditSupplierScreen> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+  final _balanceController = TextEditingController(text: '0');
   
   bool _isEdit = false;
   Supplier? _supplierToEdit;
@@ -43,6 +44,7 @@ class _AddEditSupplierScreenState extends State<AddEditSupplierScreen> {
       _phoneController.text = _supplierToEdit!.phone;
       _addressController.text = _supplierToEdit!.address;
       _notesController.text = _supplierToEdit!.notes ?? '';
+      _balanceController.text = _supplierToEdit!.currentBalance.toString();
     } catch (e) {
       // Handle not found
     }
@@ -54,6 +56,7 @@ class _AddEditSupplierScreenState extends State<AddEditSupplierScreen> {
     _phoneController.dispose();
     _addressController.dispose();
     _notesController.dispose();
+    _balanceController.dispose();
     super.dispose();
   }
 
@@ -65,7 +68,7 @@ class _AddEditSupplierScreenState extends State<AddEditSupplierScreen> {
         phone: _phoneController.text,
         address: _addressController.text,
         notes: _notesController.text,
-        currentBalance: _supplierToEdit?.currentBalance ?? 0.0,
+        currentBalance: double.tryParse(_balanceController.text) ?? 0.0,
         createdAt: _supplierToEdit?.createdAt ?? AppDateUtils.getCurrentIso(),
       );
 
@@ -106,6 +109,13 @@ class _AddEditSupplierScreenState extends State<AddEditSupplierScreen> {
               TextFormField(
                 controller: _addressController,
                 decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _balanceController,
+                decoration: const InputDecoration(labelText: 'رصيد افتتاحي (موجب = لنا / سالب = علينا)', border: OutlineInputBorder()),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                enabled: !_isEdit, // Usually balance is only set on creation
               ),
               const SizedBox(height: 16),
               TextFormField(

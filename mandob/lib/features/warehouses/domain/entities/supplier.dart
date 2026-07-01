@@ -5,7 +5,7 @@ class Supplier extends Equatable {
   final String name;
   final String phone;
   final String address;
-  final double currentBalance; // Positive means you owe them
+  final double currentBalance; // Negative means we owe them (debt), Positive means they owe us
   final String? notes;
   final String createdAt;
 

@@ -14,10 +14,24 @@ class InvoiceLocalDataSource {
     final db = await dbHelper.database;
     
     return await db.transaction((txn) async {
+      double actualPaid = invoice.paidAmount;
+      double actualRemaining = invoice.remaining;
+      double overpayment = 0.0;
+      
+      if (invoice.type == 'sale' && invoice.remaining < 0) {
+        overpayment = invoice.remaining.abs();
+        actualPaid = invoice.totalAmount;
+        actualRemaining = 0.0;
+      }
+      
+      final invoiceMap = invoice.toMap();
+      invoiceMap['paid_amount'] = actualPaid;
+      invoiceMap['remaining'] = actualRemaining;
+
       // 1. Insert invoice
       final invoiceId = await txn.insert(
         DatabaseTables.invoices, 
-        invoice.toMap()
+        invoiceMap
       );
 
       for (final item in items) {
@@ -149,12 +163,31 @@ class InvoiceLocalDataSource {
       // 6. Update customer balance 
       // Debt increases -> balance becomes more negative for sales. 
       // For returns, debt decreases -> balance becomes more positive.
-      if (invoice.remaining > 0) {
+      if (actualRemaining > 0) {
         int balanceMultiplier = invoice.type == 'return' ? 1 : -1;
         await txn.rawUpdate(
           'UPDATE ${DatabaseTables.customers} SET current_balance = current_balance + ? WHERE id = ?',
-          [invoice.remaining * balanceMultiplier, invoice.customerId]
+          [actualRemaining * balanceMultiplier, invoice.customerId]
         );
+      }
+      
+      // 7. Handle overpayment for sales (acts as a collection)
+      if (overpayment > 0) {
+        // Increase customer balance (positive = they owe us less / we owe them)
+        await txn.rawUpdate(
+          'UPDATE ${DatabaseTables.customers} SET current_balance = current_balance + ? WHERE id = ?',
+          [overpayment, invoice.customerId]
+        );
+        
+        // Register as collection for auditing
+        await txn.insert(DatabaseTables.collections, {
+          'customer_id': invoice.customerId,
+          'amount': overpayment,
+          'collect_date': invoice.invoiceDate,
+          'invoice_id': invoiceId,
+          'notes': 'مبلغ إضافي مسدد مع فاتورة مبيعات #${invoice.invoiceNumber}',
+          'created_at': invoice.createdAt,
+        });
       }
 
       return invoiceId;

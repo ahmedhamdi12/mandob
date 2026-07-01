@@ -15,6 +15,7 @@ import '../../features/sales/presentation/screens/invoice_details_screen.dart';
 import '../../features/expenses/presentation/screens/expenses_screen.dart';
 import '../../features/expenses/presentation/screens/add_expense_screen.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../../features/dashboard/presentation/screens/month_details_screen.dart';
 import '../../features/collections/presentation/screens/collections_screen.dart';
 import '../../features/collections/presentation/screens/add_collection_screen.dart';
 import '../../features/reports/presentation/screens/reports_screen.dart';
@@ -58,6 +59,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/expenses',
           builder: (context, state) => const ExpensesScreen(),
+        ),
+        GoRoute(
+          path: '/dashboard/month/:yearMonth',
+          builder: (context, state) => MonthDetailsScreen(yearMonth: state.pathParameters['yearMonth']!),
         ),
       ],
     ),

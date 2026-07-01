@@ -113,18 +113,19 @@ class CollectionLocalDataSource {
   }
 
   /// Get total outstanding debt for a specific customer.
-  /// Debt = sum of remaining on active invoices for that customer.
+  /// Debt = negative current_balance (the customer owes us).
   Future<double> getCustomerDebt(int customerId) async {
     final db = await dbHelper.database;
 
     final result = await db.rawQuery('''
-      SELECT SUM(remaining) as total
-      FROM ${DatabaseTables.invoices}
-      WHERE customer_id = ? AND status = 'active' AND remaining > 0
+      SELECT current_balance
+      FROM ${DatabaseTables.customers}
+      WHERE id = ?
     ''', [customerId]);
 
-    if (result.isNotEmpty && result.first['total'] != null) {
-      return (result.first['total'] as num).toDouble();
+    if (result.isNotEmpty && result.first['current_balance'] != null) {
+      final balance = (result.first['current_balance'] as num).toDouble();
+      if (balance < 0) return balance.abs(); // Return positive value representing debt
     }
     return 0.0;
   }
@@ -134,13 +135,13 @@ class CollectionLocalDataSource {
     final db = await dbHelper.database;
 
     final result = await db.rawQuery('''
-      SELECT SUM(remaining) as total
-      FROM ${DatabaseTables.invoices}
-      WHERE status = 'active' AND remaining > 0
+      SELECT SUM(current_balance) as total
+      FROM ${DatabaseTables.customers}
+      WHERE current_balance < 0
     ''');
 
     if (result.isNotEmpty && result.first['total'] != null) {
-      return (result.first['total'] as num).toDouble();
+      return (result.first['total'] as num).toDouble().abs(); // Return positive value representing debt
     }
     return 0.0;
   }

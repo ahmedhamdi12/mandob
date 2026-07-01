@@ -9,6 +9,8 @@ import '../cubit/warehouse_state.dart';
 import '../../domain/entities/supplier_invoice.dart';
 import '../../domain/entities/supplier_invoice_item.dart';
 import '../../../../core/utils/date_utils.dart';
+import '../../../sales/presentation/widgets/product_selector_sheet.dart';
+import '../../../products/domain/entities/product.dart';
 
 class NewSupplierInvoiceScreen extends StatefulWidget {
   final bool isReturn;
@@ -38,25 +40,30 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
     super.dispose();
   }
 
-  void _showAddItemDialog() {
-    final itemNameController = TextEditingController();
+  void _showAddProductDialog(Product product) {
     final qtyController = TextEditingController();
     final priceController = TextEditingController();
+
+    if (product.lastPurchasePrice != null && product.lastPurchasePrice! > 0) {
+      priceController.text = product.lastPurchasePrice.toString();
+    } else if (product.calculatedUnitCost > 0) {
+      priceController.text = product.calculatedUnitCost.toString();
+    }
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('إضافة صنف'),
+        title: Text(product.name),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: itemNameController, decoration: const InputDecoration(labelText: 'اسم الصنف', border: OutlineInputBorder())),
+            Text('الكمية الحالية في المخزون: ${product.stockQty} ${product.baseUnit}', style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الكمية', border: OutlineInputBorder()))),
+                Expanded(child: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'الكمية (${product.baseUnit})', border: const OutlineInputBorder()))),
                 const SizedBox(width: 8),
-                Expanded(child: TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر', border: OutlineInputBorder()))),
+                Expanded(child: TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر الوحدة', border: OutlineInputBorder()))),
               ],
             )
           ],
@@ -65,15 +72,23 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: () {
-              final name = itemNameController.text;
               final qty = double.tryParse(qtyController.text) ?? 0;
               final price = double.tryParse(priceController.text) ?? 0;
 
-              if (name.isNotEmpty && qty > 0 && price >= 0) {
+              if (qty > 0 && price >= 0) {
+                if (widget.isReturn && qty > product.stockQty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('لا يمكن إرجاع كمية أكبر من المخزون الحالي'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+
                 final item = SupplierInvoiceItem(
                   id: 0,
                   invoiceId: 0,
-                  itemName: name,
+                  productId: product.id,
+                  qtyUnits: qty.toInt(),
+                  itemName: product.name,
                   qty: qty,
                   unitPrice: price,
                   lineTotal: qty * price,
@@ -181,7 +196,24 @@ class _NewSupplierInvoiceScreenState extends State<NewSupplierInvoiceScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('الأصناف', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                TextButton.icon(onPressed: _showAddItemDialog, icon: const Icon(Icons.add), label: const Text('إضافة صنف')),
+                TextButton.icon(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => ProductSelectorSheet(
+                        onProductSelected: (product) {
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            if (mounted) _showAddProductDialog(product);
+                          });
+                        },
+                      ),
+                    );
+                  }, 
+                  icon: const Icon(Icons.add), 
+                  label: const Text('إضافة صنف')
+                ),
               ],
             ),
             items.isEmpty

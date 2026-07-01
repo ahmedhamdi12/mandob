@@ -65,6 +65,6 @@ class MainApp extends StatelessWidget {
         locale: const Locale('ar', 'EG'),
         debugShowCheckedModeBanner: false,
       ),
-    );
+    ); 
   }
 }

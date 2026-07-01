@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -44,6 +44,11 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await db.execute('ALTER TABLE ${DatabaseTables.invoices} ADD COLUMN type TEXT NOT NULL DEFAULT "sale"');
+    }
+    if (oldVersion < 6) {
+      await db.execute('ALTER TABLE ${DatabaseTables.supplierInvoiceItems} ADD COLUMN product_id INTEGER');
+      await db.execute('ALTER TABLE ${DatabaseTables.supplierInvoiceItems} ADD COLUMN unit_id INTEGER');
+      await db.execute('ALTER TABLE ${DatabaseTables.supplierInvoiceItems} ADD COLUMN qty_units INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -249,16 +254,20 @@ class DatabaseHelper {
       )
     ''');
 
-    // Supplier Invoice Items (Manual entry, independent of products table)
+    // Supplier Invoice Items
     await db.execute('''
       CREATE TABLE ${DatabaseTables.supplierInvoiceItems} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_id INTEGER NOT NULL,
+        product_id INTEGER,
         item_name TEXT NOT NULL,
         qty REAL NOT NULL,
+        unit_id INTEGER,
+        qty_units INTEGER NOT NULL DEFAULT 0,
         unit_price REAL NOT NULL,
         line_total REAL NOT NULL,
-        FOREIGN KEY (invoice_id) REFERENCES ${DatabaseTables.supplierInvoices}(id) ON DELETE CASCADE
+        FOREIGN KEY (invoice_id) REFERENCES ${DatabaseTables.supplierInvoices}(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES ${DatabaseTables.products}(id)
       )
     ''');
 

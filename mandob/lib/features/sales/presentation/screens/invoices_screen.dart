@@ -16,18 +16,22 @@ class InvoicesScreen extends StatefulWidget {
 
 class _InvoicesScreenState extends State<InvoicesScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedDate;
+  String? _selectedDate; // Could be used for day if user uses the day picker
+  String? _selectedMonth; // Used for the default month view
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     _loadData();
   }
 
   void _loadData() {
+    // If a specific day is selected, use it. Otherwise use the month.
     context.read<InvoiceCubit>().loadInvoices(
       query: _searchController.text,
-      date: _selectedDate,
+      date: _selectedDate ?? _selectedMonth, 
     );
   }
 
@@ -46,9 +50,33 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }
   }
 
+  Future<void> _selectMonth() async {
+    final now = DateTime.now();
+    final initialDate = _selectedMonth != null 
+        ? DateTime.parse('$_selectedMonth-01') 
+        : now;
+        
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDatePickerMode: DatePickerMode.year,
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDate = null; // Clear day filter if month is picked
+        _selectedMonth = '${picked.year}-${picked.month.toString().padLeft(2, '0')}';
+      });
+      _loadData();
+    }
+  }
+
   void _clearDateFilter() {
     setState(() {
       _selectedDate = null;
+      // We don't clear the month, we want it to fallback to the month.
+      // But we can clear the month too if we want to show all time. Let's just fallback to selected month.
     });
     _loadData();
   }
@@ -59,6 +87,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       appBar: AppBar(
         title: const Text('المبيعات'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: _selectMonth,
+            tooltip: 'تصفية بالشهر',
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'sale') {
